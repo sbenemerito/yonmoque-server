@@ -22,14 +22,16 @@ const io = socketIO(server);
 io.on('connection', socket => {
   console.log('client connected on websocket');
 
-  socket.on('create room', ({roomData, playerName}) => {
+  socket.on('create room', ({ roomData, playerName }) => {
     const { name, side } = roomData;
     let players = {
       "0": {
-        name: null
+        name: null,
+        skin: null
       },
       "1": {
-        name: null
+        name: null,
+        skin: null
       }
     };
     players[side].name = playerName;
@@ -43,7 +45,11 @@ io.on('connection', socket => {
       };
 
       // temporarily use room index as secret key to verify following requests
-      socket.emit('room joined', { ...room, secret: rooms.push(room) });
+      socket.emit('room joined', {
+        ...room,
+        isMultiplayer: true,
+        secret: rooms.push(room)
+      });
       socket.broadcast.emit('room created', rooms);
     }
   });
