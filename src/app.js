@@ -55,7 +55,7 @@ io.on('connection', socket => {
         ...room,
         isMultiplayer: true
       });
-      socket.broadcast.emit('room created', rooms);
+      io.emit('room created', rooms);
     }
   });
 });
