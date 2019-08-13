@@ -38,17 +38,22 @@ io.on('connection', socket => {
 
     // basic validation
     if (name !== undefined && side !== undefined) {
+      // auto increment room ID
+      const id = rooms.length === 0 ? 0 : rooms[rooms.length-1].id + 1;
+
       const room = {
+        id,
         name,
         players,
+        secret: id, // temporarily use room id as secret key to verify following requests
         status: 'waiting',
       };
 
-      // temporarily use room index as secret key to verify following requests
+      rooms.push(room);
+
       socket.emit('room joined', {
         ...room,
-        isMultiplayer: true,
-        secret: rooms.push(room)
+        isMultiplayer: true
       });
       socket.broadcast.emit('room created', rooms);
     }
