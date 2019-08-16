@@ -90,7 +90,7 @@ describe("Room Creation and Auto Join", () => {
 });
 
 describe("Joining of Room", () => {
-  test('should join room, and notify other player in room', (done) => {
+  test('should join room, and notify all users', (done) => {
     // Definition of data to be passed
     const joinRoomData = {
       id: 0,
@@ -129,8 +129,51 @@ describe("Joining of Room", () => {
       done();
     });
 
+    // Client 3 handler for when a room/game starts
+    client3.on('room started', (updatedRoomList) => {
+      expect(updatedRoomList).toContainEqual(expectedRoomData);
+      done();
+    });
+
     // Emit join room event
     client2.emit('join room', joinRoomData);
+
+    setTimeout(() => {
+      done.fail(new Error('Reached timeout, test failed'));
+    }, 1000);
+  });
+});
+
+describe("Game Movement", () => {
+  test('should make move, and notify opponent only', (done) => {
+    // Definition of data to be passed
+    const moveData = {
+      type: 'addPiece',
+      src: null,
+      dest: 15
+    };
+
+    // Definition of data to be expected
+    let expectedMoveData = { ... moveData };
+
+    // Client 1 handler for when another player joins its created room
+    client1.on('player joined', (updatedRoom) => {
+      expect(updatedRoom).toEqual(expectedRoomData);
+    });
+
+    // Client 3 handler for when opponent makes a move (shouldn't be triggered)
+    client3.on('opponent moved', (updatedRoomList) => {
+      done.fail(new Error('Client 3 should not receive move data!'));
+    });
+
+    // Client 2 handler for when Client 1 makes a move
+    client2.on('opponent moved', (opponentMove) => {
+      expect(opponentMove).toEqual(expectedMoveData);
+      done();
+    });
+
+    // Emit join room event
+    client1.emit('make move', moveData);
 
     setTimeout(() => {
       done.fail(new Error('Reached timeout, test failed'));
