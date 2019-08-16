@@ -148,6 +148,7 @@ describe("Game Movement", () => {
   test('should make move, and notify opponent only', (done) => {
     // Definition of data to be passed
     const moveData = {
+      roomId: 0,
       type: 'addPiece',
       src: null,
       dest: 15
@@ -163,7 +164,7 @@ describe("Game Movement", () => {
 
     // Client 3 handler for when opponent makes a move (shouldn't be triggered)
     client3.on('opponent moved', (updatedRoomList) => {
-      done.fail(new Error('Client 3 should not receive move data!'));
+      done.fail(new Error('Client 3 should not receive move data'));
     });
 
     // Client 2 handler for when Client 1 makes a move
@@ -172,11 +173,42 @@ describe("Game Movement", () => {
       done();
     });
 
-    // Emit join room event
+    // Emit make move event
     client1.emit('make move', moveData);
 
     setTimeout(() => {
       done.fail(new Error('Reached timeout, test failed'));
+    }, 1000);
+  });
+
+  test('should only allow players in a room to broadcast moves', (done) => {
+    // Client 1 and Client 2 are in Room 0, while Client 3 is not in any.
+    // Therefore, Client 1 and 2 should not receive move broadcast from Client 3
+
+    // Definition of data to be passed
+    const moveData = {
+      roomId: 0,
+      type: 'addPiece',
+      src: null,
+      dest: 20
+    };
+
+    // Client 1 handler for when opponent makes a move (shouldn't be triggered by Client 3)
+    client1.on('opponent moved', (opponentMove) => {
+      done.fail(new Error('Client 1 should not receive move data from Client 3'));
+    });
+
+    // Client 2 handler for when opponent makes a move (shouldn't be triggered by Client 3)
+    client2.on('opponent moved', (opponentMove) => {
+      done.fail(new Error('Client 2 should not receive move data from Client 3'));
+    });
+
+    // Emit make move event
+    client3.emit('make move', moveData);
+
+    setTimeout(() => {
+      // only fail if Client 1 or Client 2 receives broadcasted move from Client 3
+      done();
     }, 1000);
   });
 });
