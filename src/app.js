@@ -27,14 +27,17 @@ io.on('connection', socket => {
     let players = {
       "0": {
         name: null,
+        socket: null,
         skin: null
       },
       "1": {
         name: null,
+        socket: null,
         skin: null
       }
     };
     players[side].name = playerName;
+    players[side].socket = socket.id;
 
     // basic validation
     if (name !== undefined && side !== undefined) {
@@ -56,6 +59,30 @@ io.on('connection', socket => {
         isMultiplayer: true
       });
       io.emit('room created', rooms);
+    }
+  });
+
+  socket.on('join room', ({ id, playerName }) => {
+    // findIndex returns -1 when no match is found
+    const roomIndex = rooms.findIndex(room => room.id === id);
+
+    // only do something when a matching room is found
+    if (roomIndex > -1 && playerName) {
+      socket.join(id);
+
+      // update room object
+      let room = rooms[roomIndex];
+      room.status = 'playing';
+
+      const playerSide = room.players[0].name === null ? "0" : "1";
+      room.players[playerSide].name = playerName;
+      room.players[playerSide].socket = socket.id;
+
+      rooms[roomIndex] = room;
+
+      socket.to(id).emit('player joined', room);
+      socket.emit('room joined', { ...room, isMultiplayer: true });
+      io.emit('room started', rooms);
     }
   });
 });
