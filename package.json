@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Web backend for Yonmoque to handle web socket connections",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest",
     "start": "npm run prod",
     "server": "babel-node ./src/app",
     "server:prod": "node ./dist/app",
@@ -40,6 +40,8 @@
     "@babel/core": "^7.5.5",
     "@babel/node": "^7.5.5",
     "@babel/preset-env": "^7.5.5",
-    "nodemon": "^1.19.1"
+    "jest": "^24.8.0",
+    "nodemon": "^1.19.1",
+    "socket.io-client": "^2.2.0"
   }
 }
