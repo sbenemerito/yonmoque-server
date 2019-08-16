@@ -22,6 +22,8 @@ const io = socketIO(server);
 io.on('connection', socket => {
   console.log('client connected on websocket');
 
+  // insert adding online players count?
+
   socket.on('create room', ({ roomData, playerName }) => {
     const { name, side } = roomData;
     let players = {
@@ -50,14 +52,13 @@ io.on('connection', socket => {
         players,
         secret: id, // temporarily use room id as secret key to verify following requests
         status: 'waiting',
+        isMultiplayer: true
       };
 
       rooms.push(room);
+      socket.join(id);
 
-      socket.emit('room joined', {
-        ...room,
-        isMultiplayer: true
-      });
+      socket.emit('room joined', room);
       io.emit('room created', rooms);
     }
   });
@@ -81,9 +82,15 @@ io.on('connection', socket => {
       rooms[roomIndex] = room;
 
       socket.to(id).emit('player joined', room);
-      socket.emit('room joined', { ...room, isMultiplayer: true });
+      socket.emit('room joined', room);
       io.emit('room started', rooms);
     }
+  });
+
+  socket.on('disconnect', () => {
+    console.log('client disconnected');
+
+    // insert declaring remaining player as winner, for games(s) socket left
   });
 });
 
