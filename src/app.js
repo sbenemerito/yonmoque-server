@@ -89,11 +89,12 @@ io.on('connection', socket => {
   });
 
   socket.on('make move', ({ id, type, src, dest }) => {
-    // find returns undefined when no match is found
-    const gameRoom = rooms.find(room => room.id === id);
+    // findIndex returns -1 when no match is found
+    const roomIndex = rooms.findIndex(room => room.id === id);
 
     // only do something when a matching room is found
-    if (gameRoom) {
+    if (roomIndex > -1) {
+      const gameRoom = rooms[roomIndex];
       const roomSockets = [gameRoom.players[0].socket, gameRoom.players[1].socket];
       // indexOf returns -1 when no match is found
       const playerIndex = roomSockets.indexOf(socket.id);
@@ -102,6 +103,8 @@ io.on('connection', socket => {
       if (playerIndex > -1 && gameRoom.turn === playerIndex) {
         // emit move data to room
         socket.to(id).emit('opponent moved', { id, type, src, dest });
+        // update current turn in game room
+        rooms[roomIndex].turn = (rooms[roomIndex].turn - 1) * -1;
       } else {
         socket.emit('move rejected');
       }
