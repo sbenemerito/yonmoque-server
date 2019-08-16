@@ -66,7 +66,8 @@ describe("Room Creation and Auto Join", () => {
       },
       secret: 0,
       status: 'waiting',
-      isMultiplayer: true
+      isMultiplayer: true,
+      turn: 0
     };
 
     // Handler for Client 2 when a room is created
@@ -82,10 +83,6 @@ describe("Room Creation and Auto Join", () => {
 
     // Emit create room event
     client1.emit('create room', createRoomData);
-
-    setTimeout(() => {
-      done.fail(new Error('Reached timeout, test failed'));
-    }, 1000);
   });
 });
 
@@ -115,7 +112,8 @@ describe("Joining of Room", () => {
       },
       secret: 0,
       status: 'playing',  // change room status since it is full
-      isMultiplayer: true
+      isMultiplayer: true,
+      turn: 0
     };
 
     // Client 1 handler for when another player joins its created room
@@ -137,10 +135,6 @@ describe("Joining of Room", () => {
 
     // Emit join room event
     client2.emit('join room', joinRoomData);
-
-    setTimeout(() => {
-      done.fail(new Error('Reached timeout, test failed'));
-    }, 1000);
   });
 });
 
@@ -148,19 +142,14 @@ describe("Game Movement", () => {
   test('should make move, and notify opponent only', (done) => {
     // Definition of data to be passed
     const moveData = {
-      roomId: 0,
+      id: 0,
       type: 'addPiece',
       src: null,
       dest: 15
     };
 
     // Definition of data to be expected
-    let expectedMoveData = { ... moveData };
-
-    // Client 1 handler for when another player joins its created room
-    client1.on('player joined', (updatedRoom) => {
-      expect(updatedRoom).toEqual(expectedRoomData);
-    });
+    let expectedMoveData = { ...moveData };
 
     // Client 3 handler for when opponent makes a move (shouldn't be triggered)
     client3.on('opponent moved', (updatedRoomList) => {
@@ -175,10 +164,6 @@ describe("Game Movement", () => {
 
     // Emit make move event
     client1.emit('make move', moveData);
-
-    setTimeout(() => {
-      done.fail(new Error('Reached timeout, test failed'));
-    }, 1000);
   });
 
   test('should only allow players in a room to broadcast moves', (done) => {
@@ -187,7 +172,7 @@ describe("Game Movement", () => {
 
     // Definition of data to be passed
     const moveData = {
-      roomId: 0,
+      id: 0,
       type: 'addPiece',
       src: null,
       dest: 20
@@ -203,12 +188,12 @@ describe("Game Movement", () => {
       done.fail(new Error('Client 2 should not receive move data from Client 3'));
     });
 
+    // Client 3 handler for when move is rejected
+    client3.on('move rejected', () => {
+      done();
+    });
+
     // Emit make move event
     client3.emit('make move', moveData);
-
-    setTimeout(() => {
-      // only fail if Client 1 or Client 2 receives broadcasted move from Client 3
-      done();
-    }, 1000);
   });
 });
