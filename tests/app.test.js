@@ -6,16 +6,21 @@ const options ={
   'force new connection': true
 };
 
-/* Setup and Teardown
+// store open sockets here for cleanup
+let openSockets = [];
 
-// beforeAll(() => {
-// });
+afterAll(() => {
+  // disconnect all open sockets
+  openSockets.forEach(socket => {
+    if (socket.connected) socket.disconnect();
+  });
 
-// afterAll(() => {
-// });
-*/
+  // clear open sockets list
+  openSockets = [];
+});
 
-describe("Yonmoque Server", () => {
+
+describe("Room Creation", () => {
   test('should create room and broadcast to all users', (done) => {
     // Data definition
     const createRoomData = {
@@ -42,6 +47,7 @@ describe("Yonmoque Server", () => {
     };
 
     const client1 = io.connect(socketURL, options);
+    openSockets.push(client1);
 
     client1.on('connect', () => {
       // Set expected room data to contain client1's socket id
@@ -49,6 +55,7 @@ describe("Yonmoque Server", () => {
 
       // Client 1 is connected, connect Client 2
       const client2 = io.connect(socketURL, options);
+      openSockets.push(client2);
 
       client2.on('connect', () => {
         // Make Client 1 create a game room
@@ -62,7 +69,11 @@ describe("Yonmoque Server", () => {
     });
 
     setTimeout(() => {
-      done.fail(new Error('Reached timeout, test failed'))
+      done.fail(new Error('Reached timeout, test failed'));
     }, 150);
+  });
+
+  test('should create room and join created room', (done) => {
+    done.fail(new Error('Test failed ;)'));
   });
 });
