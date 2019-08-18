@@ -74,6 +74,9 @@ io.on('connection', socket => {
 
       // update room object
       let room = rooms[roomIndex];
+
+      if (room.status === 'playing') return;
+
       room.status = 'playing';
 
       const playerSide = room.players[0].name === null ? "0" : "1";
