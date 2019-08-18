@@ -25,7 +25,7 @@ io.on('connection', socket => {
   // insert adding online players count?
 
   socket.on('create room', ({ roomData, playerName }) => {
-    const { name, side } = roomData;
+    const { side } = roomData;
     let players = {
       "0": {
         name: null,
@@ -38,17 +38,17 @@ io.on('connection', socket => {
         skin: null
       }
     };
-    players[side].name = playerName;
+    players[side].name = `Player ${side + 1}`;
     players[side].socket = socket.id;
 
     // basic validation
-    if (name !== undefined && side !== undefined) {
+    if (side !== undefined) {
       // auto increment room ID
       const id = rooms.length === 0 ? 0 : rooms[rooms.length-1].id + 1;
 
       const room = {
         id,
-        name,
+        name: socket.id.substring(0, 6),
         players,
         secret: id, // temporarily use room id as secret key to verify following requests
         status: 'waiting',
@@ -69,7 +69,7 @@ io.on('connection', socket => {
     const roomIndex = rooms.findIndex(room => room.id === id);
 
     // only do something when a matching room is found
-    if (roomIndex > -1 && playerName) {
+    if (roomIndex > -1) {
       socket.join(id);
 
       // update room object
@@ -79,8 +79,8 @@ io.on('connection', socket => {
 
       room.status = 'playing';
 
-      const playerSide = room.players[0].name === null ? "0" : "1";
-      room.players[playerSide].name = playerName;
+      const playerSide = room.players[0].name === null ? 0 : 1;
+      room.players[playerSide].name = `Player ${playerSide + 1}`;
       room.players[playerSide].socket = socket.id;
 
       rooms[roomIndex] = room;
