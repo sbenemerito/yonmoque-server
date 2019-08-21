@@ -115,7 +115,7 @@ io.on('connection', socket => {
     }
   });
 
-  socket.on('finish game', (id) => {
+  socket.on('finish game', ({ id }) => {
     // findIndex returns -1 when no match is found
     const roomIndex = rooms.findIndex(room => room.id === id);
 
