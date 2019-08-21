@@ -53,7 +53,8 @@ io.on('connection', socket => {
         secret: id, // temporarily use room id as secret key to verify following requests
         status: 'waiting',
         isMultiplayer: true,
-        turn: 0
+        turn: 0,
+        playersEnded: [false, false]
       };
 
       rooms.push(room);
@@ -110,6 +111,33 @@ io.on('connection', socket => {
         rooms[roomIndex].turn = (rooms[roomIndex].turn - 1) * -1;
       } else {
         socket.emit('move rejected');
+      }
+    }
+  });
+
+  socket.on('finish game', (id) => {
+    // findIndex returns -1 when no match is found
+    const roomIndex = rooms.findIndex(room => room.id === id);
+
+    // only do something when a matching room is found
+    if (roomIndex > -1) {
+      const gameRoom = rooms[roomIndex];
+      const roomSockets = [gameRoom.players[0].socket, gameRoom.players[1].socket];
+      // indexOf returns -1 when no match is found
+      const playerIndex = roomSockets.indexOf(socket.id);
+
+      // only continue when player belongs to the room and his turn
+      if (playerIndex > -1 && !gameRoom.playersEnded[playerIndex]) {
+        // update current turn in game room
+        rooms[roomIndex].playersEnded[playerIndex] = true;
+
+        // if both players declared end, then close the game room
+        if (rooms[roomIndex].playersEnded.every(hasEnded => hasEnded === true)) {
+          rooms = rooms.filter(room => room.id !== id);
+          io.emit('room ended', rooms);
+        }
+      } else {
+        socket.emit('end rejected');
       }
     }
   });
