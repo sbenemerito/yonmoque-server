@@ -17,6 +17,7 @@ let playingRooms = [];
 app.get('/', (req, res) => res.json({ msg: 'API is working!' }));
 app.get('/rooms', (req, res) => res.json({ rooms }));
 
+const getSecret = () => [...Array(30)].map(() => Math.random().toString(36)[2]).join('');
 const server = http.createServer(app);
 
 const io = socketIO(server);
@@ -52,8 +53,7 @@ io.on('connection', socket => {
         id,
         name: socket.id.substring(0, 6),
         players,
-        secret: id, // temporarily use room id as secret key to verify following requests
-        status: 'waiting',
+        secret: getSecret(), // will be used as socket room
         isMultiplayer: true,
         turn: 0,
         playersEnded: [false, false],
@@ -61,7 +61,7 @@ io.on('connection', socket => {
       };
 
       rooms.push(room);
-      socket.join(id);
+      socket.join(room.secret);
 
       socket.emit('room joined', room);
       io.emit('room created', rooms);
@@ -74,15 +74,11 @@ io.on('connection', socket => {
 
     // only do something when a matching room is found
     if (roomIndex > -1) {
-      socket.join(id);
-
-      // update room object
       let room = rooms[roomIndex];
 
-      if (room.status === 'playing') return;
+      socket.join(room.secret);
 
-      room.status = 'playing';
-
+      // update room object
       const playerSide = room.players[0].name === null ? 0 : 1;
       room.players[playerSide].name = `Player ${playerSide + 1}`;
       room.players[playerSide].socket = socket.id;
@@ -92,7 +88,7 @@ io.on('connection', socket => {
       rooms = rooms.filter(gameRoom => gameRoom.id !== id);
       playingRooms.push(room);
 
-      socket.to(id).emit('player joined', room);
+      socket.to(room.secret).emit('player joined', room);
       socket.emit('room joined', room);
       io.emit('room started', rooms);
     }
@@ -112,7 +108,7 @@ io.on('connection', socket => {
       // only continue when player belongs to the room and his turn
       if (playerIndex > -1 && gameRoom.turn === playerIndex) {
         // emit move data to room
-        socket.to(id).emit('opponent moved', { id, type, src, dest });
+        socket.to(gameRoom.secret).emit('opponent moved', { id, type, src, dest });
         // update current turn in game room
         playingRooms[roomIndex].turn = (playingRooms[roomIndex].turn - 1) * -1;
       } else {
@@ -122,17 +118,26 @@ io.on('connection', socket => {
   });
 
   socket.on('disconnect', () => {
-    console.log('client disconnected');
-
     // declare opponent as winner, for ongoing games disconnected player was in
-    const joinedRoom = playingRooms.find(room => {
+    const playingRoom = playingRooms.find(room => {
       const roomSockets = [room.players[0].socket, room.players[1].socket];
       return roomSockets.includes(socket.id);
     });
 
-    if (joinedRoom !== undefined) {
-      socket.to(joinedRoom.id).emit('opponent left');
-      playingRooms = playingRooms.filter(room => room.id !== joinedRoom.id);
+    if (playingRoom !== undefined) {
+      socket.to(playingRoom.secret).emit('opponent left');
+      playingRooms = playingRooms.filter(room => room.id !== playingRoom.id);
+    }
+
+    // remove waiting games disconnected player was in
+    const waitingRoom = rooms.find(room => {
+      const roomSockets = [room.players[0].socket, room.players[1].socket];
+      return roomSockets.includes(socket.id);
+    });
+
+    if (waitingRoom !== undefined) {
+      rooms = rooms.filter(room => room.id !== waitingRoom.id);
+      io.emit('room ended');
     }
   });
 });
@@ -143,7 +148,7 @@ const cleanRooms = setInterval(() => {
   const currentTimestamp = (new Date()).getTime();
 
   playingRooms = playingRooms.filter(room => {
-    return currentTimeStamp - room.startedTimestamp < hourInMilliseconds;
+    return currentTimestamp - room.startedTimestamp < hourInMilliseconds;
   });
 }, hourInMilliseconds);
 
