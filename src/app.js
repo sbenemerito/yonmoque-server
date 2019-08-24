@@ -141,7 +141,7 @@ io.on('connection', socket => {
 
     if (waitingRoom !== undefined) {
       rooms = rooms.filter(room => room.id !== waitingRoom.id);
-      io.emit('room ended');
+      io.emit('room ended', rooms);
     }
   });
 });
