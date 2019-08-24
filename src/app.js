@@ -125,7 +125,11 @@ io.on('connection', socket => {
     });
 
     if (playingRoom !== undefined) {
-      socket.to(playingRoom.secret).emit('opponent left');
+      const disconnectedMeta = {
+        player: [playingRoom.players[0].socket, playingRoom.players[1].socket].indexOf(socket.id)
+      };
+
+      socket.to(playingRoom.secret).emit('opponent left', disconnectedMeta);
       playingRooms = playingRooms.filter(room => room.id !== playingRoom.id);
     }
 
