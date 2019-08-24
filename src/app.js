@@ -12,6 +12,7 @@ app.use(cors())
 
 // Temporarily serve fake data, with this variable
 let rooms = [];
+let playingRooms = [];
 
 app.get('/', (req, res) => res.json({ msg: 'API is working!' }));
 app.get('/rooms', (req, res) => res.json({ rooms }));
@@ -26,23 +27,24 @@ io.on('connection', socket => {
 
   socket.on('create room', ({ roomData, playerName }) => {
     const { side } = roomData;
-    let players = {
-      "0": {
-        name: null,
-        socket: null,
-        skin: null
-      },
-      "1": {
-        name: null,
-        socket: null,
-        skin: null
-      }
-    };
-    players[side].name = `Player ${side + 1}`;
-    players[side].socket = socket.id;
 
     // basic validation
     if (side !== undefined) {
+      let players = {
+        "0": {
+          name: null,
+          socket: null,
+          skin: null
+        },
+        "1": {
+          name: null,
+          socket: null,
+          skin: null
+        }
+      };
+      players[side].name = `Player ${side + 1}`;
+      players[side].socket = socket.id;
+
       // auto increment room ID
       const id = rooms.length === 0 ? 0 : rooms[rooms.length-1].id + 1;
 
@@ -53,7 +55,9 @@ io.on('connection', socket => {
         secret: id, // temporarily use room id as secret key to verify following requests
         status: 'waiting',
         isMultiplayer: true,
-        turn: 0
+        turn: 0,
+        playersEnded: [false, false],
+        startedTimestamp: null
       };
 
       rooms.push(room);
@@ -82,8 +86,11 @@ io.on('connection', socket => {
       const playerSide = room.players[0].name === null ? 0 : 1;
       room.players[playerSide].name = `Player ${playerSide + 1}`;
       room.players[playerSide].socket = socket.id;
+      room.startedTimestamp = new Date();
 
-      rooms[roomIndex] = room;
+      // Move specific room to playingRooms
+      rooms = rooms.filter(gameRoom => gameRoom.id !== id);
+      playingRooms.push(room);
 
       socket.to(id).emit('player joined', room);
       socket.emit('room joined', room);
@@ -93,11 +100,11 @@ io.on('connection', socket => {
 
   socket.on('make move', ({ id, type, src, dest }) => {
     // findIndex returns -1 when no match is found
-    const roomIndex = rooms.findIndex(room => room.id === id);
+    const roomIndex = playingRooms.findIndex(room => room.id === id);
 
     // only do something when a matching room is found
     if (roomIndex > -1) {
-      const gameRoom = rooms[roomIndex];
+      const gameRoom = playingRooms[roomIndex];
       const roomSockets = [gameRoom.players[0].socket, gameRoom.players[1].socket];
       // indexOf returns -1 when no match is found
       const playerIndex = roomSockets.indexOf(socket.id);
@@ -107,7 +114,7 @@ io.on('connection', socket => {
         // emit move data to room
         socket.to(id).emit('opponent moved', { id, type, src, dest });
         // update current turn in game room
-        rooms[roomIndex].turn = (rooms[roomIndex].turn - 1) * -1;
+        playingRooms[roomIndex].turn = (playingRooms[roomIndex].turn - 1) * -1;
       } else {
         socket.emit('move rejected');
       }
@@ -117,9 +124,28 @@ io.on('connection', socket => {
   socket.on('disconnect', () => {
     console.log('client disconnected');
 
-    // insert declaring remaining player as winner, for games(s) socket left
+    // declare opponent as winner, for ongoing games disconnected player was in
+    const joinedRoom = playingRooms.find(room => {
+      const roomSockets = [room.players[0].socket, room.players[1].socket];
+      return roomSockets.includes(socket.id);
+    });
+
+    if (joinedRoom !== undefined) {
+      socket.to(joinedRoom.id).emit('opponent left');
+      playingRooms = playingRooms.filter(room => room.id !== joinedRoom.id);
+    }
   });
 });
+
+// Remove playing rooms that have lasted for more than an hour
+const hourInMilliseconds = 3600000;
+const cleanRooms = setInterval(() => {
+  const currentTimestamp = (new Date()).getTime();
+
+  playingRooms = playingRooms.filter(room => {
+    return currentTimeStamp - room.startedTimestamp < hourInMilliseconds;
+  });
+}, hourInMilliseconds);
 
 server.listen(PORT, () => {
   console.log('server started and listening on port ' + PORT);
