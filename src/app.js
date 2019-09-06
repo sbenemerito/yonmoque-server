@@ -4,6 +4,9 @@ import socketIO from 'socket.io';
 import cors from 'cors';
 import sqlite3 from 'sqlite3';
 import dotenv from 'dotenv';
+import bodyParser from 'body-parser';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
 
 // Use .env config
@@ -40,6 +43,11 @@ const PORT = process.env.PORT || 5000;
 
 const app = express();
 
+// body-parser middleware
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended:false }));
+
+// CORS middleware
 app.use(cors())
 
 // Room data is stored in memory
@@ -48,6 +56,51 @@ let playingRooms = [];
 
 app.get('/', (req, res) => res.json({ msg: 'API is working!' }));
 app.get('/rooms', (req, res) => res.json({ rooms }));
+
+// Authentication endpoints
+app.post('/login', (req, res, next) => {
+  const { username, password } = req.body;
+
+  if (!username) {
+    res.status(400).json({ error: 'Username is required', key: 'usernameMissing' });
+    return next();
+  }
+
+  if (!password) {
+    res.status(400).json({ error: 'Password is required', key: 'passwordMissing' });
+    return next();
+  }
+
+  db.serialize(() => {
+    db.get(`SELECT * FROM Users WHERE username = '${username}'`, (error, user) => {
+      if (user === undefined) {
+        res.status(400).json({
+          error: 'There is no account with the given username',
+          key: 'wrongUsername'
+        });
+        return next();
+      }
+
+      bcrypt.compare(password, user.password, (err, isEqual) => {
+        if (!isEqual) {
+          res.status(400).json({ error: 'Invalid password', key: 'wrongPassword' });
+          return next();
+        }
+
+        const token = jwt.sign(
+          { id: user.id },
+          process.env.SECRET,
+          { expiresIn: '24h' }
+        );
+
+        // do not return password
+        user.password = undefined;
+
+        res.json({ user, token });
+      });
+    });
+  });
+});
 
 // Yonmoque sockets handler
 const getSecret = () => [...Array(30)].map(() => Math.random().toString(36)[2]).join('');

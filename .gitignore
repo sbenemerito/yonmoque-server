@@ -88,4 +88,4 @@ typings/
 .dynamodb/
 
 # SQLite3 DB
-.sqlite3
+*.sqlite3
