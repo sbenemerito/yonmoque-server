@@ -3,11 +3,16 @@ import express from 'express';
 import socketIO from 'socket.io';
 import cors from 'cors';
 import sqlite3 from 'sqlite3';
+import dotenv from 'dotenv';
 
+
+// Use .env config
+dotenv.config();
 
 // Database initialization
+const databaseDir = process.env.DATABASE || 'db.sqlite3';
 const sqlite = sqlite3.verbose();
-const db = new sqlite.Database('db.sqlite3', (error) => {
+const db = new sqlite.Database(databaseDir, error => {
   if (error === null) console.log('Successfully connected to DB');
   else console.error(error, 'Cannot connect to database!');
 });
