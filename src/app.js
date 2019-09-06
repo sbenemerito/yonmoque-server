@@ -2,21 +2,49 @@ import http from 'http';
 import express from 'express';
 import socketIO from 'socket.io';
 import cors from 'cors';
+import sqlite3 from 'sqlite3';
 
 
+// Database initialization
+const sqlite = sqlite3.verbose();
+const db = new sqlite.Database('db.sqlite3', (error) => {
+  if (error === null) console.log('Successfully connected to DB');
+  else console.error(error, 'Cannot connect to database!');
+});
+
+db.serialize(() => {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS Users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      first_name TEXT,
+      last_name TEXT,
+      username TEXT NOT NULL,
+      password TEXT NOT NULL,
+      wins_blue INTEGER DEFAULT 0 NOT NULL,
+      wins_white INTEGER DEFAULT 0 NOT NULL,
+      losses_blue INTEGER DEFAULT 0 NOT NULL,
+      losses_white INTEGER DEFAULT 0 NOT NULL,
+      is_admin INTEGER DEFAULT 0 NOT NULL,
+      date_created DEFAULT CURRENT_DATE NOT NULL
+    )
+  `);
+});
+
+// Express setup
 const PORT = process.env.PORT || 5000;
 
 const app = express();
 
 app.use(cors())
 
-// Temporarily serve fake data, with this variable
+// Room data is stored in memory
 let rooms = [];
 let playingRooms = [];
 
 app.get('/', (req, res) => res.json({ msg: 'API is working!' }));
 app.get('/rooms', (req, res) => res.json({ rooms }));
 
+// Yonmoque sockets handler
 const getSecret = () => [...Array(30)].map(() => Math.random().toString(36)[2]).join('');
 const server = http.createServer(app);
 
@@ -156,6 +184,7 @@ const cleanRooms = setInterval(() => {
   });
 }, hourInMilliseconds);
 
+// Serve
 server.listen(PORT, () => {
   console.log('server started and listening on port ' + PORT);
 });
