@@ -56,6 +56,26 @@ let playingRooms = [];
 
 app.get('/', (req, res) => res.json({ msg: 'API is working!' }));
 app.get('/rooms', (req, res) => res.json({ rooms }));
+app.get('/users', (req, res) => {
+  db.all(`SELECT * FROM Users`, (error, users) => {
+    // do not return password
+    const returnData = users.map(user => ({ ...user, password: undefined }));
+    res.json(returnData);
+  });
+});
+app.get('/users/:username', (req, res, next) => {
+  db.get(`SELECT * FROM Users WHERE username = '${req.params.username}'`, (error, user) => {
+    if (user === undefined) {
+      res.status(404).json({ error: 'User not found', key: 'userNotFound' });
+      return next();
+    }
+
+    // do not return password
+    user.password = undefined;
+
+    res.json({ ...user });
+  });
+});
 
 // Authentication endpoints
 app.post('/login', (req, res, next) => {
@@ -103,7 +123,7 @@ app.post('/login', (req, res, next) => {
 });
 
 app.post('/signup', (req, res, next) => {
-  const { username, password, password2 } = req.body;
+  const { first_name, last_name, username, password, password2 } = req.body;
 
   if (!username) {
     res.status(400).json({ error: 'Username is required', key: 'usernameMissing' });
@@ -134,7 +154,8 @@ app.post('/signup', (req, res, next) => {
 
       const hashedPassword = bcrypt.hashSync(password, bcrypt.genSaltSync(10));
       const insertQuery = `
-        INSERT INTO Users(username, password) VALUES ('${username}', '${hashedPassword}')
+        INSERT INTO Users(first_name, last_name, username, password)
+        VALUES ('${first_name || ''}', '${last_name || ''}', '${username}', '${hashedPassword}')
       `;
 
       db.run(insertQuery, (error, user) => {
