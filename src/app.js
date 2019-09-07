@@ -102,6 +102,64 @@ app.post('/login', (req, res, next) => {
   });
 });
 
+app.post('/signup', (req, res, next) => {
+  const { username, password, password2 } = req.body;
+
+  if (!username) {
+    res.status(400).json({ error: 'Username is required', key: 'usernameMissing' });
+    return next();
+  }
+
+  if (username.length > 16) {
+    res.status(400).json({ error: 'Username exceeded max length of 16', key: 'usernameTooLong' });
+    return next();
+  }
+
+  if (!password) {
+    res.status(400).json({ error: 'Password is required', key: 'passwordMissing' });
+    return next();
+  }
+
+  if (password !== password2) {
+    res.status(400).json({ error: 'Passwords do not match', key: 'passwordsNotMatching' });
+    return next();
+  }
+
+  db.serialize(() => {
+    db.get(`SELECT * FROM Users WHERE username = '${username}'`, (error, user) => {
+      if (user !== undefined) {
+        res.status(400).json({ error: 'Username is already taken', key: 'takenUsername'});
+        return next();
+      }
+
+      const hashedPassword = bcrypt.hashSync(password, bcrypt.genSaltSync(10));
+      const insertQuery = `
+        INSERT INTO Users(username, password) VALUES ('${username}', '${hashedPassword}')
+      `;
+
+      db.run(insertQuery, (error, user) => {
+        if (error) {
+          res.status(500).json({ error: 'Unexpected error', details: error });
+          return next();
+        }
+
+        db.get(`SELECT * FROM Users WHERE username = '${username}'`, (error, user) => {
+          const token = jwt.sign(
+            { id: user.id },
+            process.env.SECRET,
+            { expiresIn: '24h' }
+          );
+
+          // do not return password
+          user.password = undefined;
+
+          res.json({ user, token });
+        });
+      });
+    });
+  });
+});
+
 // Yonmoque sockets handler
 const getSecret = () => [...Array(30)].map(() => Math.random().toString(36)[2]).join('');
 const server = http.createServer(app);
