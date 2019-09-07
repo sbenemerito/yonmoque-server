@@ -66,8 +66,7 @@ app.get('/users', (req, res) => {
 app.get('/users/:username', (req, res, next) => {
   db.get(`SELECT * FROM Users WHERE username = '${req.params.username}'`, (error, user) => {
     if (user === undefined) {
-      res.status(404).json({ error: 'User not found', key: 'userNotFound' });
-      return next();
+      return res.status(404).json({ error: 'User not found', key: 'userNotFound' });
     }
 
     // do not return password
@@ -82,29 +81,25 @@ app.post('/login', (req, res, next) => {
   const { username, password } = req.body;
 
   if (!username) {
-    res.status(400).json({ error: 'Username is required', key: 'usernameMissing' });
-    return next();
+    return res.status(400).json({ error: 'Username is required', key: 'usernameMissing' });
   }
 
   if (!password) {
-    res.status(400).json({ error: 'Password is required', key: 'passwordMissing' });
-    return next();
+    return res.status(400).json({ error: 'Password is required', key: 'passwordMissing' });
   }
 
   db.serialize(() => {
     db.get(`SELECT * FROM Users WHERE username = '${username}'`, (error, user) => {
       if (user === undefined) {
-        res.status(400).json({
+        return res.status(400).json({
           error: 'There is no account with the given username',
           key: 'wrongUsername'
         });
-        return next();
       }
 
       bcrypt.compare(password, user.password, (err, isEqual) => {
         if (!isEqual) {
-          res.status(400).json({ error: 'Invalid password', key: 'wrongPassword' });
-          return next();
+          return res.status(400).json({ error: 'Invalid password', key: 'wrongPassword' });
         }
 
         const token = jwt.sign(
@@ -126,30 +121,25 @@ app.post('/signup', (req, res, next) => {
   const { first_name, last_name, username, password, password2 } = req.body;
 
   if (!username) {
-    res.status(400).json({ error: 'Username is required', key: 'usernameMissing' });
-    return next();
+    return res.status(400).json({ error: 'Username is required', key: 'usernameMissing' });
   }
 
   if (username.length > 16) {
-    res.status(400).json({ error: 'Username exceeded max length of 16', key: 'usernameTooLong' });
-    return next();
+    return res.status(400).json({ error: 'Username exceeded max length: 16', key: 'usernameTooLong' });
   }
 
   if (!password) {
-    res.status(400).json({ error: 'Password is required', key: 'passwordMissing' });
-    return next();
+    return res.status(400).json({ error: 'Password is required', key: 'passwordMissing' });
   }
 
   if (password !== password2) {
-    res.status(400).json({ error: 'Passwords do not match', key: 'passwordsNotMatching' });
-    return next();
+    return res.status(400).json({ error: 'Passwords do not match', key: 'passwordsNotMatching' });
   }
 
   db.serialize(() => {
     db.get(`SELECT * FROM Users WHERE username = '${username}'`, (error, user) => {
       if (user !== undefined) {
-        res.status(400).json({ error: 'Username is already taken', key: 'takenUsername'});
-        return next();
+        return res.status(400).json({ error: 'Username is already taken', key: 'takenUsername'});
       }
 
       const hashedPassword = bcrypt.hashSync(password, bcrypt.genSaltSync(10));
@@ -160,8 +150,7 @@ app.post('/signup', (req, res, next) => {
 
       db.run(insertQuery, (error, user) => {
         if (error) {
-          res.status(500).json({ error: 'Unexpected error', details: error });
-          return next();
+          return res.status(500).json({ error: 'Unexpected error', details: error });
         }
 
         db.get(`SELECT * FROM Users WHERE username = '${username}'`, (error, user) => {
@@ -181,6 +170,63 @@ app.post('/signup', (req, res, next) => {
   });
 });
 
+app.post('/toggle-admin/:id', (req, res, next) => {
+  // verify that client is an admin
+  if (req.hasOwnProperty('headers') && req.headers.hasOwnProperty('authorization')) {
+    try {
+      /*
+       * Try to decode & verify the JWT token
+       * The token contains user's id ( it can contain more informations )
+       * and this is saved in req.user object
+       */
+      req.user = jwt.verify(req.headers['authorization'], process.env.SECRET);
+      db.serialize(() => {
+        db.get(`SELECT * FROM Users WHERE id = ${req.user.id}`, (error, user) => {
+          if (user.is_admin) next();
+          else
+            return res.status(403).json({
+              error: 'You are not allowed to perform this operation',
+              key: 'notAllowed'
+            });
+        });
+      });
+    } catch (err) {
+      /*
+       * If the authorization header is corrupted, it throws exception
+       * So return 401 status code with JSON error message
+       */
+      return res.status(401).json({
+        error: 'Failed to authenticate token',
+        key: 'authenticationFailed'
+      });
+    }
+  } else {
+    return res.status(403).json({
+      error: 'You are not allowed to perform this operation',
+      key: 'notAllowed'
+    });
+  }
+}, (req, res, next) => {
+  // proceed if client is admin
+  const { id } = req.params;
+
+  db.serialize(() => {
+    db.get(`SELECT * FROM Users WHERE id = ${id}`, (error, user) => {
+      if (user === undefined) {
+        return res.status(404).json({ error: 'User not found', key: 'userNotFound'});
+      }
+
+      const isAdmin = user.is_admin ? 0 : 1;
+      db.run(`UPDATE Users SET is_admin = ${isAdmin} WHERE id = ${id}`, (error) => {
+        if (error) {
+          return res.status(500).json({ error: 'Unexpected error', details: error });
+        }
+
+        res.json({ ...user, password: undefined, is_admin: isAdmin });
+      });
+    });
+  });
+});
 // Yonmoque sockets handler
 const getSecret = () => [...Array(30)].map(() => Math.random().toString(36)[2]).join('');
 const server = http.createServer(app);
