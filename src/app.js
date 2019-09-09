@@ -227,34 +227,57 @@ app.post('/toggle-admin/:id', (req, res, next) => {
     });
   });
 });
+
 // Yonmoque sockets handler
 const getSecret = () => [...Array(30)].map(() => Math.random().toString(36)[2]).join('');
-const server = http.createServer(app);
+const getUserFromToken = (token) => {
+  if (!token) return null;
 
+  try {
+    /*
+     * Try to decode & verify the JWT token
+     * The token contains user's id ( it can contain more informations )
+     * and this is saved in req.user object
+     */
+    const userFromToken = jwt.verify(token, process.env.SECRET);
+    db.serialize(() => {
+      db.get(`SELECT * FROM Users WHERE id = ${userFromToken.id}`, (error, user) => {
+        if (user !== undefined) return { ..user, password: undefined };
+        return null;
+      });
+    });
+  } catch (err) {
+    return null;
+  }
+};
+
+const server = http.createServer(app);
 const io = socketIO(server);
+
 io.on('connection', socket => {
   console.log('client connected on websocket');
 
   // insert adding online players count?
 
-  socket.on('create room', ({ roomData, playerName }) => {
+  socket.on('create room', ({ roomData, token }) => {
+    const userFromToken = getUserFromToken(token);
     const { side } = roomData;
 
     // basic validation
-    if (side !== undefined) {
+    if (side !== undefined && userFromToken !== null) {
       let players = {
         "0": {
-          name: null,
+          user: null,
           socket: null,
           skin: null
         },
         "1": {
-          name: null,
+          user: null,
           socket: null,
           skin: null
         }
       };
-      players[side].name = `Player ${side + 1}`;
+      players[side].user = userFromToken;
       players[side].socket = socket.id;
 
       // auto increment room ID
@@ -279,19 +302,20 @@ io.on('connection', socket => {
     }
   });
 
-  socket.on('join room', ({ id, playerName }) => {
+  socket.on('join room', ({ id, token }) => {
     // findIndex returns -1 when no match is found
     const roomIndex = rooms.findIndex(room => room.id === id);
+    const userFromToken = getUserFromToken(token);
 
     // only do something when a matching room is found
-    if (roomIndex > -1) {
+    if (roomIndex > -1 && userFromToken !== null) {
       let room = rooms[roomIndex];
 
       socket.join(room.secret);
 
       // update room object
-      const playerSide = room.players[0].name === null ? 0 : 1;
-      room.players[playerSide].name = `Player ${playerSide + 1}`;
+      const playerSide = room.players[0].user === null ? 0 : 1;
+      room.players[playerSide].user = userFromToken;
       room.players[playerSide].socket = socket.id;
       room.startedTimestamp = new Date();
 
@@ -305,12 +329,13 @@ io.on('connection', socket => {
     }
   });
 
-  socket.on('make move', ({ id, type, src, dest }) => {
+  socket.on('make move', ({ id, type, src, dest, token }) => {
     // findIndex returns -1 when no match is found
     const roomIndex = playingRooms.findIndex(room => room.id === id);
+    const userFromToken = getUserFromToken(token);
 
     // only do something when a matching room is found
-    if (roomIndex > -1) {
+    if (roomIndex > -1 && userFromToken !== null) {
       const gameRoom = playingRooms[roomIndex];
       const roomSockets = [gameRoom.players[0].socket, gameRoom.players[1].socket];
       // indexOf returns -1 when no match is found
