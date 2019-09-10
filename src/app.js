@@ -242,7 +242,7 @@ const getUserFromToken = (token) => {
     const userFromToken = jwt.verify(token, process.env.SECRET);
     db.serialize(() => {
       db.get(`SELECT * FROM Users WHERE id = ${userFromToken.id}`, (error, user) => {
-        if (user !== undefined) return { ..user, password: undefined };
+        if (user !== undefined) return { ...user, password: undefined };
         return null;
       });
     });
