@@ -290,7 +290,7 @@ io.on('connection', socket => {
         secret: getSecret(), // will be used as socket room
         isMultiplayer: true,
         turn: 0,
-        playersEnded: [false, false],
+        declaredWinner: [null, null],
         startedTimestamp: null
       };
 
@@ -349,6 +349,57 @@ io.on('connection', socket => {
         playingRooms[roomIndex].turn = (playingRooms[roomIndex].turn - 1) * -1;
       } else {
         socket.emit('move rejected');
+      }
+    }
+  });
+
+  socket.on('endgame', ({ id, winner, token }) => {
+    // findIndex returns -1 when no match is found
+    const roomIndex = playingRooms.findIndex(room => room.id === id);
+    const userFromToken = getUserFromToken(token);
+
+    // only do something when a matching room is found
+    if (roomIndex > -1 && userFromToken !== null) {
+      const gameRoom = playingRooms[roomIndex];
+      const roomSockets = [gameRoom.players[0].socket, gameRoom.players[1].socket];
+      // indexOf returns -1 when no match is found
+      const playerIndex = roomSockets.indexOf(socket.id);
+
+      // only continue when player belongs to the room and his turn
+      if (playerIndex > -1) {
+        playingRooms[roomIndex].declaredWinner[playerIndex] = winner;
+        const [firstWinner, secondWinner] = playingRooms[roomIndex].declaredWinner;
+
+        if (!playingRooms[roomIndex].declaredWinner.includes(null) && firstWinner === secondWinner) {
+          const loser = (winner * -1) + 1;
+          const winnerObj = gameRoom.players[winner].user;
+          const loserObj = gameRoom.players[loser].user;
+          const colorMap = ['blue', 'white'];
+
+          db.serialize(() => {
+            db.get(`SELECT * FROM Users WHERE id = '${winnerObj.id}'`, (error, user) => {
+              if (user !== undefined) {
+                const addWinQuery = `
+                  UPDATE Users SET wins_${colorMap[winner]} = ${winner === 0 ? user.wins_blue+1 : user.wins_white+1}
+                  WHERE id = ${user.id}
+                `;
+
+                db.run(addWinQuery, (error, _) => console.log(`win added for ${winnerObj.username}`));
+              }
+            });
+
+            db.get(`SELECT * FROM Users WHERE id = '${loserObj.id}'`, (error, user) => {
+              if (user !== undefined) {
+                const addLossQuery = `
+                  UPDATE Users SET losses_${colorMap[loser]} = ${loser === 0 ? user.losses_blue + 1 : user.losses_white + 1}
+                  WHERE id = ${user.id}
+                `;
+
+                db.run(addLossQuery, (error, _) => console.log(`win added for ${loserObj.username}`));
+              }
+            });
+          });
+        }
       }
     }
   });
