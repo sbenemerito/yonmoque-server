@@ -412,12 +412,43 @@ io.on('connection', socket => {
     });
 
     if (playingRoom !== undefined) {
+      const index = [playingRoom.players[0].socket, playingRoom.players[1].socket].indexOf(socket.id);
       const disconnectedMeta = {
-        player: [playingRoom.players[0].socket, playingRoom.players[1].socket].indexOf(socket.id)
+        player: index
       };
 
       socket.to(playingRoom.secret).emit('opponent left', disconnectedMeta);
       playingRooms = playingRooms.filter(room => room.id !== playingRoom.id);
+
+      const loser = index;
+      const winner = (loser * -1) + 1;
+      const winnerObj = playingRoom.players[winner].user;
+      const loserObj = playingRoom.players[loser].user;
+      const colorMap = ['blue', 'white'];
+
+      db.serialize(() => {
+        db.get(`SELECT * FROM Users WHERE id = '${winnerObj.id}'`, (error, user) => {
+          if (user !== undefined) {
+            const addWinQuery = `
+              UPDATE Users SET wins_${colorMap[winner]} = ${winner === 0 ? user.wins_blue + 1 : user.wins_white + 1}
+              WHERE id = ${user.id}
+            `;
+
+            db.run(addWinQuery, (error, _) => console.log(`win added for ${winnerObj.username}`));
+          }
+        });
+
+        db.get(`SELECT * FROM Users WHERE id = '${loserObj.id}'`, (error, user) => {
+          if (user !== undefined) {
+            const addLossQuery = `
+                  UPDATE Users SET losses_${colorMap[loser]} = ${loser === 0 ? user.losses_blue + 1 : user.losses_white + 1}
+                  WHERE id = ${user.id}
+                `;
+
+            db.run(addLossQuery, (error, _) => console.log(`win added for ${loserObj.username}`));
+          }
+        });
+      });
     }
 
     // remove waiting games disconnected player was in
