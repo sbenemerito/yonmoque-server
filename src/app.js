@@ -52,6 +52,7 @@ app.use(cors())
 
 // Room data is stored in memory
 let rooms = [];
+let socketMap = {};
 let playingRooms = [];
 
 app.get('/', (req, res) => res.json({ msg: 'API is working!' }));
@@ -100,6 +101,10 @@ app.post('/login', (req, res, next) => {
       bcrypt.compare(password, user.password, (err, isEqual) => {
         if (!isEqual) {
           return res.status(400).json({ error: 'Invalid password', key: 'wrongPassword' });
+        }
+
+        if (socketMap[`uid${user.id}`] !== undefined) {
+          return res.status(400).json({ error: 'The account is already online.', key: 'duplicateLogin' });
         }
 
         const token = jwt.sign(
@@ -231,24 +236,26 @@ app.post('/toggle-admin/:id', (req, res, next) => {
 // Yonmoque sockets handler
 const getSecret = () => [...Array(30)].map(() => Math.random().toString(36)[2]).join('');
 const getUserFromToken = (token) => {
-  if (!token) return null;
+  return new Promise((resolve, reject) => {
+    if (!token) resolve(null);
 
-  try {
-    /*
-     * Try to decode & verify the JWT token
-     * The token contains user's id ( it can contain more informations )
-     * and this is saved in req.user object
-     */
-    const userFromToken = jwt.verify(token, process.env.SECRET);
-    db.serialize(() => {
-      db.get(`SELECT * FROM Users WHERE id = ${userFromToken.id}`, (error, user) => {
-        if (user !== undefined) return { ...user, password: undefined };
-        return null;
+    try {
+      /*
+       * Try to decode & verify the JWT token
+       * The token contains user's id ( it can contain more informations )
+       * and this is saved in req.user object
+       */
+      const userFromToken = jwt.verify(token, process.env.SECRET);
+      db.serialize(() => {
+        db.get(`SELECT * FROM Users WHERE id = ${userFromToken.id}`, (error, user) => {
+          if (user !== undefined) resolve({ ...user, password: undefined });
+          resolve(null);
+        });
       });
-    });
-  } catch (err) {
-    return null;
-  }
+    } catch (err) {
+      resolve(null);
+    }
+  });
 };
 
 const server = http.createServer(app);
@@ -259,12 +266,20 @@ io.on('connection', socket => {
 
   // insert adding online players count?
 
-  socket.on('create room', ({ roomData, token }) => {
-    const userFromToken = getUserFromToken(token);
+  socket.on('bind token', async ({ token }) => {
+    const userFromToken = await getUserFromToken(token);
+
+    if (userFromToken !== null && !socketMap[`uid${userFromToken.id}`]) {
+      socketMap[`uid${userFromToken.id}`] = socket.id;
+    }
+  });
+
+  socket.on('create room', async ({ roomData, token }) => {
+    const userFromToken = await getUserFromToken(token);
     const { side } = roomData;
 
     // basic validation
-    if (side !== undefined && userFromToken !== null) {
+    if (side !== undefined && userFromToken !== null && socketMap[`uid${userFromToken.id}`] !== undefined) {
       let players = {
         "0": {
           user: null,
@@ -302,13 +317,13 @@ io.on('connection', socket => {
     }
   });
 
-  socket.on('join room', ({ id, token }) => {
+  socket.on('join room', async ({ id, token }) => {
     // findIndex returns -1 when no match is found
     const roomIndex = rooms.findIndex(room => room.id === id);
-    const userFromToken = getUserFromToken(token);
+    const userFromToken = await getUserFromToken(token);
 
     // only do something when a matching room is found
-    if (roomIndex > -1 && userFromToken !== null) {
+    if (roomIndex > -1 && userFromToken !== null && socketMap[`uid${userFromToken.id}`] !== undefined) {
       let room = rooms[roomIndex];
 
       socket.join(room.secret);
@@ -329,13 +344,13 @@ io.on('connection', socket => {
     }
   });
 
-  socket.on('make move', ({ id, type, src, dest, token }) => {
+  socket.on('make move', async ({ id, type, src, dest, token }) => {
     // findIndex returns -1 when no match is found
     const roomIndex = playingRooms.findIndex(room => room.id === id);
-    const userFromToken = getUserFromToken(token);
+    const userFromToken = await getUserFromToken(token);
 
     // only do something when a matching room is found
-    if (roomIndex > -1 && userFromToken !== null) {
+    if (roomIndex > -1 && userFromToken !== null && socketMap[`uid${userFromToken.id}`] !== undefined) {
       const gameRoom = playingRooms[roomIndex];
       const roomSockets = [gameRoom.players[0].socket, gameRoom.players[1].socket];
       // indexOf returns -1 when no match is found
@@ -353,13 +368,13 @@ io.on('connection', socket => {
     }
   });
 
-  socket.on('endgame', ({ id, winner, token }) => {
+  socket.on('endgame', async ({ id, winner, token }) => {
     // findIndex returns -1 when no match is found
     const roomIndex = playingRooms.findIndex(room => room.id === id);
-    const userFromToken = getUserFromToken(token);
+    const userFromToken = await getUserFromToken(token);
 
     // only do something when a matching room is found
-    if (roomIndex > -1 && userFromToken !== null) {
+    if (roomIndex > -1 && userFromToken !== null && socketMap[`uid${userFromToken.id}`] !== undefined) {
       const gameRoom = playingRooms[roomIndex];
       const roomSockets = [gameRoom.players[0].socket, gameRoom.players[1].socket];
       // indexOf returns -1 when no match is found
@@ -405,6 +420,10 @@ io.on('connection', socket => {
   });
 
   socket.on('disconnect', () => {
+    Object.keys(socketMap).forEach(key => {
+      if (socketMap[key] === socket.id) socketMap[key] = undefined;
+    });
+
     // declare opponent as winner, for ongoing games disconnected player was in
     const playingRoom = playingRooms.find(room => {
       const roomSockets = [room.players[0].socket, room.players[1].socket];
