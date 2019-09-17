@@ -272,6 +272,8 @@ io.on('connection', socket => {
     if (userFromToken !== null && !socketMap[`uid${userFromToken.id}`]) {
       socketMap[`uid${userFromToken.id}`] = socket.id;
     }
+
+    io.emit('players updated', { playerCount: Object.keys(socketMap).length });
   });
 
   socket.on('create room', async ({ roomData, token }) => {
@@ -420,8 +422,13 @@ io.on('connection', socket => {
   });
 
   socket.on('disconnect', () => {
-    Object.keys(socketMap).forEach(key => {
-      if (socketMap[key] === socket.id) socketMap[key] = undefined;
+    Object.keys(socketMap).some(item => {
+      if (socketMap[item] === socket.id) {
+        delete socketMap[item];
+        return true;
+      }
+
+      return false;
     });
 
     // declare opponent as winner, for ongoing games disconnected player was in
@@ -480,6 +487,8 @@ io.on('connection', socket => {
       rooms = rooms.filter(room => room.id !== waitingRoom.id);
       io.emit('room ended', rooms);
     }
+
+    io.emit('players updated', { playerCount: Object.keys(socketMap).length });
   });
 });
 

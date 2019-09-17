@@ -367,7 +367,11 @@ io.on('connection', function (socket) {
                 socketMap["uid".concat(userFromToken.id)] = socket.id;
               }
 
-            case 5:
+              io.emit('players updated', {
+                playerCount: Object.keys(socketMap).length
+              });
+
+            case 6:
             case "end":
               return _context.stop();
           }
@@ -627,8 +631,13 @@ io.on('connection', function (socket) {
     };
   }());
   socket.on('disconnect', function () {
-    Object.keys(socketMap).forEach(function (key) {
-      if (socketMap[key] === socket.id) socketMap[key] = undefined;
+    Object.keys(socketMap).some(function (item) {
+      if (socketMap[item] === socket.id) {
+        delete socketMap[item];
+        return true;
+      }
+
+      return false;
     }); // declare opponent as winner, for ongoing games disconnected player was in
 
     var playingRoom = playingRooms.find(function (room) {
@@ -682,6 +691,10 @@ io.on('connection', function (socket) {
       });
       io.emit('room ended', rooms);
     }
+
+    io.emit('players updated', {
+      playerCount: Object.keys(socketMap).length
+    });
   });
 }); // Remove playing rooms that have lasted for more than an hour
 
