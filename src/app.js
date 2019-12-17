@@ -8,6 +8,8 @@ import bodyParser from 'body-parser';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
+import 'core-js/stable';
+import 'regenerator-runtime/runtime';
 
 // Use .env config
 dotenv.config();
