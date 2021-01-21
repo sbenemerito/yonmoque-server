@@ -39,7 +39,7 @@
     "jsonwebtoken": "^8.5.1",
     "regenerator-runtime": "^0.13.3",
     "rimraf": "^2.6.3",
-    "socket.io": "^2.2.0",
+    "socket.io": "^2.4.0",
     "sqlite3": "^4.1.0"
   },
   "devDependencies": {
